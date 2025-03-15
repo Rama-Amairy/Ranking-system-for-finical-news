@@ -1,0 +1,16 @@
+app:
+  name: "Financial News Ranking API"
+  version: "1.0.0"
+
+news:
+  # Query-based API (For searching finance-related news)
+  query_url: "https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&language=en&apiKey={api_key}"
+
+  # Allowed finance-related queries for validation
+  allowed_queries: ["finance", "stock market", "investment", "cryptocurrency", "banking", "forex", "trading"]
+
+
+models:
+  sentiment_analysis_model:
+    name: "ProsusAI/finbert"
+    max_length: 512

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from src.routes import base, news
+from src.routes import base, news, ranking
 
 # from src.helpers.log_helper import Logger  # Import your Logger helper
 
@@ -13,6 +13,7 @@ app = FastAPI(title="Financial News Ranking API")
 # Register API routes
 app.include_router(base.base_router)
 app.include_router(news.news_router)
+app.include_router(ranking.ranking_router)
 
 # logger.info("FastAPI application has started.")
 

@@ -22,8 +22,8 @@ def get_news_controller():
     return NewsController()
 
 
-@news_router.get("/fetch-news")
-async def fetch_news(
+@news_router.get("/fetch-raw-news")
+async def fetch_raw_news(
     query: str = Query(
         ...,
         description=f"Search for finance-related news ({', '.join(load_config().news.allowed_queries)})",
@@ -31,15 +31,14 @@ async def fetch_news(
     news_controller: NewsController = Depends(get_news_controller),
 ):
     """
-    Fetches and processes finance-related news articles based on the given query,
-    applies sentiment prediction, and saves the results to a CSV file.
+    Fetches raw finance-related news articles based on the given query and saves them to a file.
 
     Args:
         query (str): The finance-related search term (e.g., "stock market").
         news_controller (NewsController): The dependency-injected instance of NewsController.
 
     Returns:
-        dict: JSON response containing processed and sentiment-predicted news articles.
+        dict: JSON response containing raw news articles.
     """
     logger.info(f"Received API request with query='{query}'")
 
@@ -57,6 +56,50 @@ async def fetch_news(
         raw_articles = response.json().get("articles", [])
         logger.info(f"Fetched {len(raw_articles)} articles successfully.")
 
+        # Save raw articles to a file
+        save_status = news_controller.save_raw_data(raw_articles)
+
+        return {
+            "message": Messages.FETCH_SUCCESS.value,
+            "save_status": save_status,
+            "data": raw_articles,
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API Request Error: {e}")
+        return {"message": Messages.FETCH_FAILURE.value, "data": []}
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return {"message": "An unexpected error occurred.", "data": []}
+
+
+@news_router.get("/apply-sentiment")
+async def apply_sentiment(
+    news_controller: NewsController = Depends(get_news_controller),
+):
+    """
+    Reads raw news articles from a file, performs sentiment analysis, and saves the results to another file.
+
+    Args:
+        news_controller (NewsController): The dependency-injected instance of NewsController.
+
+    Returns:
+        dict: JSON response containing processed and sentiment-predicted news articles.
+    """
+    logger.info("Received request to analyze sentiment on raw news data.")
+
+    try:
+        # Read raw articles from the file
+        raw_articles = news_controller.read_raw_data()
+        if not raw_articles:
+            logger.warning("No raw articles found to process.")
+            return {"message": Messages.PROCESS_FAILURE.value, "data": []}
+
         # Process the articles
         processed_articles = news_controller.processing_data(raw_articles)
         if not processed_articles:
@@ -69,7 +112,6 @@ async def fetch_news(
             logger.info("Sentiment prediction completed successfully.")
         except Exception as pred_e:
             logger.error(f"Error during sentiment prediction: {pred_e}")
-            # Ensure you have defined MODEL_PREDICTION_FAILURE in your Messages enum.
             return {"message": Messages.MODEL_PREDICTION_FAILURE.value, "data": []}
 
         # Save processed articles to CSV
@@ -80,14 +122,6 @@ async def fetch_news(
             "save_status": save_status,
             "data": processed_articles,
         }
-
-    except ValueError as e:
-        logger.error(f"Validation Error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"API Request Error: {e}")
-        return {"message": Messages.FETCH_FAILURE.value, "data": []}
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
